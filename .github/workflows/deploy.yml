@@ -1,0 +1,113 @@
+name: Deploy Cloud Functions
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'functions/**'
+      - 'src/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:  # 수동 실행 가능
+
+env:
+  PROJECT_ID: kakao-webtoon-collector
+  REGION: asia-northeast3
+  SERVICE_ACCOUNT: webtoon-collector@kakao-webtoon-collector.iam.gserviceaccount.com
+
+jobs:
+  deploy-pipeline-function:
+    name: Deploy Pipeline Function
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Prepare pipeline function
+        working-directory: functions/pipeline_function
+        run: |
+          # src 디렉토리 복사
+          if [ -d "../../src" ]; then
+            cp -r ../../src .
+          fi
+
+      - name: Deploy Pipeline Function
+        working-directory: functions/pipeline_function
+        env:
+          GCS_BUCKET_NAME: kakao-webtoon-raw
+          BIGQUERY_PROJECT_ID: ${{ env.PROJECT_ID }}
+          BIGQUERY_DATASET_ID: kakao_webtoon
+        run: |
+          # gcloud functions deploy는 기본적으로 기존 함수를 업데이트합니다
+          # Gen2 함수는 Cloud Run 서비스로 배포되므로 run.admin 권한이 필요합니다
+          echo "함수 배포/업데이트 중..."
+          gcloud functions deploy pipeline-function \
+            --gen2 \
+            --runtime=python311 \
+            --region=${{ env.REGION }} \
+            --source=. \
+            --entry-point=main \
+            --trigger-http \
+            --allow-unauthenticated \
+            --timeout=3600s \
+            --memory=512MB \
+            --set-env-vars "GCS_BUCKET_NAME=$GCS_BUCKET_NAME,BIGQUERY_PROJECT_ID=$BIGQUERY_PROJECT_ID,BIGQUERY_DATASET_ID=$BIGQUERY_DATASET_ID,DATA_FORMAT=jsonl" \
+            --service-account=${{ env.SERVICE_ACCOUNT }} \
+            --max-instances=1
+
+  deploy-data-validation-function:
+    name: Deploy Data Validation Function
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Deploy Data Validation Function
+        working-directory: functions/data_validation_function
+        env:
+          GCP_PROJECT_ID: ${{ env.PROJECT_ID }}
+          GCP_REGION: ${{ env.REGION }}
+          BIGQUERY_PROJECT_ID: ${{ env.PROJECT_ID }}
+          BIGQUERY_DATASET_ID: kakao_webtoon
+          MIN_EXPECTED_RECORDS: 500
+          NOTIFICATION_CHANNEL_EMAIL: ${{ secrets.NOTIFICATION_CHANNEL_EMAIL }}
+        run: |
+          # gcloud functions deploy는 기본적으로 기존 함수를 업데이트합니다
+          # Gen2 함수는 Cloud Run 서비스로 배포되므로 run.admin 권한이 필요합니다
+          echo "함수 배포/업데이트 중..."
+          gcloud functions deploy data-validation-function \
+            --gen2 \
+            --runtime=python311 \
+            --region=${{ env.REGION }} \
+            --source=. \
+            --entry-point=main \
+            --trigger-http \
+            --allow-unauthenticated \
+            --service-account=${{ env.SERVICE_ACCOUNT }} \
+            --timeout=540s \
+            --memory=256MB \
+            --max-instances=1 \
+            --set-env-vars "BIGQUERY_PROJECT_ID=$BIGQUERY_PROJECT_ID,BIGQUERY_DATASET_ID=$BIGQUERY_DATASET_ID,MIN_EXPECTED_RECORDS=$MIN_EXPECTED_RECORDS,NOTIFICATION_CHANNEL_EMAIL=$NOTIFICATION_CHANNEL_EMAIL"
+

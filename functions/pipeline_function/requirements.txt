@@ -1,0 +1,26 @@
+# Cloud Functions 의존성 패키지
+
+# Functions Framework
+functions-framework>=3.5.0
+
+# HTTP 요청
+requests>=2.31.0
+urllib3>=2.0.0
+
+# 브라우저 자동화 (선택적, 클라이언트 사이드 정렬용)
+selenium>=4.15.0
+
+# HTML 파싱
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# 데이터 처리
+pandas>=2.0.0
+
+# 날짜 처리
+python-dateutil>=2.8.0
+
+# GCP 서비스
+google-cloud-bigquery>=3.11.0
+google-cloud-storage>=2.10.0
+

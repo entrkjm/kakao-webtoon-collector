@@ -1,0 +1,29 @@
+# 카카오 웹툰 주간 차트 수집 파이프라인 - 의존성 패키지
+
+# HTTP 요청
+requests>=2.31.0
+urllib3>=2.0.0
+
+# 브라우저 자동화 (JavaScript 렌더링 필요)
+selenium>=4.15.0
+
+# HTML 파싱
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# 데이터 처리
+pandas>=2.0.0
+
+# 날짜 처리
+python-dateutil>=2.8.0
+
+# GCP 서비스
+google-cloud-bigquery>=3.11.0
+google-cloud-storage>=2.10.0
+
+# 로깅 (표준 라이브러리 사용하지만 명시)
+# logging은 Python 표준 라이브러리
+
+# 타입 힌트 (Python 3.9+ 기본 지원)
+# typing은 Python 표준 라이브러리
+
