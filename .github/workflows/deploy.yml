@@ -55,6 +55,7 @@ jobs:
           # gcloud functions deploy는 기본적으로 기존 함수를 업데이트합니다
           # Gen2 함수는 Cloud Run 서비스로 배포되므로 run.admin 권한이 필요합니다
           echo "함수 배포/업데이트 중..."
+          # 기존 함수가 있으면 업데이트, 없으면 생성
           gcloud functions deploy pipeline-function \
             --gen2 \
             --runtime=python311 \
@@ -67,7 +68,8 @@ jobs:
             --memory=512MB \
             --set-env-vars "GCS_BUCKET_NAME=$GCS_BUCKET_NAME,BIGQUERY_PROJECT_ID=$BIGQUERY_PROJECT_ID,BIGQUERY_DATASET_ID=$BIGQUERY_DATASET_ID,DATA_FORMAT=jsonl" \
             --service-account=${{ env.SERVICE_ACCOUNT }} \
-            --max-instances=1
+            --max-instances=1 \
+            --quiet
 
   deploy-data-validation-function:
     name: Deploy Data Validation Function
