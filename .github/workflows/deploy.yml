@@ -1,5 +1,7 @@
 name: Deploy Cloud Functions
 
+# 카카오 웹툰 수집기 CI/CD 워크플로우
+
 on:
   push:
     branches:
