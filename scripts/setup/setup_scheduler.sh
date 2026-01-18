@@ -16,7 +16,7 @@ fi
 FUNCTION_NAME="pipeline_function"
 REGION="asia-northeast3"
 JOB_NAME="kakao-webtoon-weekly-collection"
-SCHEDULE="0 0 * * 1"  # 매주 월요일 00:00 UTC (= 매주 월요일 오전 9시 KST)
+SCHEDULE="0 0 * * 1"  # 매주 월요일 오전 9시 KST (모든 요일 수집)
 TIMEZONE="Asia/Seoul"  # 타임존 설정으로 자동 변환됨
 
 # Cloud Functions URL 가져오기
@@ -47,7 +47,7 @@ if gcloud scheduler jobs describe "${JOB_NAME}" --location="${REGION}" >/dev/nul
         --uri="${FUNCTION_URL}" \
         --http-method=POST \
         --message-body='{"sort_keys": ["popularity", "views", "createdAt", "popularityMale", "popularityFemale"], "collect_all_weekdays": true}' \
-        --description="카카오 웹툰 주간 차트 수집 (매주 월요일 오전 9시)" \
+        --description="카카오 웹툰 주간 차트 수집 (매주 월요일 오전 9시, 모든 요일 수집)" \
         --attempt-deadline=1800s
     echo "✅ 작업 업데이트 완료"
 else
@@ -60,7 +60,7 @@ else
         --http-method=POST \
         --headers="Content-Type=application/json" \
         --message-body='{"sort_keys": ["popularity", "views", "createdAt", "popularityMale", "popularityFemale"], "collect_all_weekdays": true}' \
-        --description="카카오 웹툰 주간 차트 수집 (매주 월요일 오전 9시)" \
+        --description="카카오 웹툰 주간 차트 수집 (매주 월요일 오전 9시, 모든 요일 수집)" \
         --attempt-deadline=1800s
     echo "✅ 작업 생성 완료"
 fi

@@ -131,6 +131,7 @@ def create_fact_weekly_chart_record(
     rank: int,
     collected_at: Optional[datetime] = None,
     weekday: Optional[str] = None,
+    weekday_rank: Optional[int] = None,
     year: Optional[int] = None,
     month: Optional[int] = None,
     week: Optional[int] = None,
@@ -143,9 +144,10 @@ def create_fact_weekly_chart_record(
     Args:
         chart_date: 수집 날짜 (필수, Partition Key)
         webtoon_id: 웹툰 ID (필수, Foreign Key -> dim_webtoon)
-        rank: 주간 차트 순위 (필수, 1 이상의 정수)
+        rank: 주간 차트 순위 (필수, 1 이상의 정수) - 통합 순위 (모든 요일 통합)
         collected_at: 데이터 수집 시각 (선택, 없으면 현재 시각)
         weekday: 요일 정보 (선택)
+        weekday_rank: 요일별 순위 (선택, 각 요일 내에서 1, 2, 3, ... 순위)
         year: 연도 (선택, collected_at에서 추출)
         month: 월 (선택, collected_at에서 추출)
         week: 해당 월의 몇 번째 주인지 (선택, collected_at에서 추출)
@@ -178,9 +180,10 @@ def create_fact_weekly_chart_record(
     return {
         'chart_date': chart_date if isinstance(chart_date, date) else chart_date,
         'webtoon_id': str(webtoon_id),
-        'rank': int(rank),
+        'rank': int(rank),  # 통합 순위 (모든 요일 통합)
         'collected_at': now,
-        'weekday': weekday,
+        'weekday': weekday,  # 요일 정보
+        'weekday_rank': int(weekday_rank) if weekday_rank is not None else None,  # 요일별 순위
         'year': int(year),
         'month': int(month),
         'week': int(week),
@@ -241,6 +244,7 @@ FACT_WEEKLY_CHART_SCHEMA = {
     'rank': int,
     'collected_at': datetime,
     'weekday': Optional[str],
+    'weekday_rank': Optional[int],  # 요일별 순위 (각 요일 내에서 1, 2, 3, ...)
     'year': int,
     'month': int,
     'week': int,
@@ -268,6 +272,7 @@ FACT_WEEKLY_CHART_COLUMNS = [
     'rank',
     'collected_at',
     'weekday',
+    'weekday_rank',
     'year',
     'month',
     'week',

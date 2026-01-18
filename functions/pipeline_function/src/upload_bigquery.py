@@ -354,6 +354,27 @@ def upload_fact_weekly_chart(
         batch_size = 1000
         total_uploaded = 0
         
+        # 스키마 명시적으로 지정 (weekday_rank 포함)
+        # records의 첫 번째 항목에서 sort_key 존재 여부 확인
+        has_sort_key = len(records) > 0 and 'sort_key' in records[0]
+        
+        schema_fields = [
+            bigquery.SchemaField('chart_date', 'DATE', mode='REQUIRED'),
+            bigquery.SchemaField('webtoon_id', 'STRING', mode='REQUIRED'),
+            bigquery.SchemaField('rank', 'INTEGER', mode='REQUIRED'),
+            bigquery.SchemaField('collected_at', 'TIMESTAMP', mode='REQUIRED'),
+            bigquery.SchemaField('weekday', 'STRING', mode='NULLABLE'),
+            bigquery.SchemaField('weekday_rank', 'INTEGER', mode='NULLABLE'),  # 요일별 순위
+            bigquery.SchemaField('year', 'INTEGER', mode='REQUIRED'),
+            bigquery.SchemaField('month', 'INTEGER', mode='REQUIRED'),
+            bigquery.SchemaField('week', 'INTEGER', mode='REQUIRED'),
+            bigquery.SchemaField('view_count', 'INTEGER', mode='NULLABLE'),
+        ]
+        
+        # sort_key가 있으면 스키마에 추가
+        if has_sort_key:
+            schema_fields.append(bigquery.SchemaField('sort_key', 'STRING', mode='NULLABLE'))
+        
         for i in range(0, len(records), batch_size):
             batch = records[i:i + batch_size]
             
@@ -364,6 +385,7 @@ def upload_fact_weekly_chart(
                     write_disposition=bigquery.WriteDisposition.WRITE_APPEND if i > 0 else bigquery.WriteDisposition.WRITE_TRUNCATE,
                     create_disposition=bigquery.CreateDisposition.CREATE_IF_NEEDED,
                     ignore_unknown_values=False,
+                    schema=schema_fields,  # 스키마 명시적으로 지정
                 )
             )
             
@@ -387,6 +409,7 @@ def upload_fact_weekly_chart(
                     rank,
                     CAST(collected_at AS TIMESTAMP) AS collected_at,
                     weekday,
+                    weekday_rank,
                     CAST(year AS INT64) AS year,
                     CAST(month AS INT64) AS month,
                     CAST(week AS INT64) AS week,
@@ -397,9 +420,19 @@ def upload_fact_weekly_chart(
             ON target.chart_date = source.chart_date 
                 AND target.webtoon_id = source.webtoon_id 
                 AND COALESCE(target.sort_key, '') = COALESCE(source.sort_key, '')
+            WHEN MATCHED THEN
+                UPDATE SET
+                    rank = source.rank,
+                    collected_at = source.collected_at,
+                    weekday = source.weekday,
+                    weekday_rank = source.weekday_rank,
+                    year = source.year,
+                    month = source.month,
+                    week = source.week,
+                    view_count = source.view_count
             WHEN NOT MATCHED THEN
-                INSERT (chart_date, webtoon_id, rank, collected_at, weekday, year, month, week, view_count, sort_key)
-                VALUES (source.chart_date, source.webtoon_id, source.rank, source.collected_at, source.weekday, source.year, source.month, source.week, source.view_count, source.sort_key)
+                INSERT (chart_date, webtoon_id, rank, collected_at, weekday, weekday_rank, year, month, week, view_count, sort_key)
+                VALUES (source.chart_date, source.webtoon_id, source.rank, source.collected_at, source.weekday, source.weekday_rank, source.year, source.month, source.week, source.view_count, source.sort_key)
             """
         else:
             # sort_key 컬럼이 없으면 기존 방식 사용
@@ -412,6 +445,7 @@ def upload_fact_weekly_chart(
                     rank,
                     CAST(collected_at AS TIMESTAMP) AS collected_at,
                     weekday,
+                    weekday_rank,
                     CAST(year AS INT64) AS year,
                     CAST(month AS INT64) AS month,
                     CAST(week AS INT64) AS week,
@@ -421,8 +455,8 @@ def upload_fact_weekly_chart(
             ON target.chart_date = source.chart_date 
                 AND target.webtoon_id = source.webtoon_id
             WHEN NOT MATCHED THEN
-                INSERT (chart_date, webtoon_id, rank, collected_at, weekday, year, month, week, view_count)
-                VALUES (source.chart_date, source.webtoon_id, source.rank, source.collected_at, source.weekday, source.year, source.month, source.week, source.view_count)
+                INSERT (chart_date, webtoon_id, rank, collected_at, weekday, weekday_rank, year, month, week, view_count)
+                VALUES (source.chart_date, source.webtoon_id, source.rank, source.collected_at, source.weekday, source.weekday_rank, source.year, source.month, source.week, source.view_count)
             """
         
         client.query(merge_query).result()

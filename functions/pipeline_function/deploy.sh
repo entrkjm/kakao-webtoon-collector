@@ -15,7 +15,7 @@ fi
 
 FUNCTION_NAME="pipeline_function"
 REGION="asia-northeast3"
-RUNTIME="python39"
+RUNTIME="python311"
 ENTRY_POINT="main"
 TIMEOUT="3600s"
 MEMORY="512MB"
@@ -38,6 +38,8 @@ cd "$SCRIPT_DIR"
 # 상위 디렉토리의 src 디렉토리를 현재 디렉토리로 복사 (Cloud Functions에서 사용)
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 if [ -d "$PROJECT_ROOT/src" ]; then
+    echo "기존 src 디렉토리 삭제 중..."
+    rm -rf src
     echo "src 디렉토리 복사 중..."
     cp -r "$PROJECT_ROOT/src" . || {
         echo "⚠️  src 디렉토리 복사 실패, 심볼릭 링크 시도..."

@@ -244,6 +244,8 @@ def load_fact_weekly_chart_csv(chart_date: date) -> pd.DataFrame:
             if col not in df.columns:
                 if col == 'weekday':
                     df[col] = None
+                elif col == 'weekday_rank':
+                    df[col] = None  # 기존 데이터는 weekday_rank가 없을 수 있음
                 elif col in ['year', 'month', 'week']:
                     # collected_at에서 추출
                     if 'collected_at' in df.columns:
@@ -481,6 +483,7 @@ def transform_parsed_data_to_models(
                 webtoon_id=item.get('webtoon_id', ''),
                 rank=item.get('rank', 0),
                 weekday=item.get('weekday'),  # 요일 정보
+                weekday_rank=item.get('weekday_rank'),  # 요일별 순위
                 view_count=item.get('view_count'),  # 조회수 (있는 경우)
                 sort_key=item.get('_sort_key') or sort_key,  # 정렬 키
                 # year, month, week는 collected_at에서 자동 계산됨

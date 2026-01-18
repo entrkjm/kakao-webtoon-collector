@@ -109,7 +109,12 @@ def main(request):
         collect_all_weekdays = request_json.get('collect_all_weekdays', False)
         limit = request_json.get('limit')  # 테스트용 제한
         
-        logger.info(f"파이프라인 실행 시작: date={chart_date}, sort_keys={sort_keys}, collect_all_weekdays={collect_all_weekdays}")
+        # 실행 날짜의 요일 계산 (0=월요일, 6=일요일)
+        weekday_index = chart_date.weekday()  # 0=Monday, 6=Sunday
+        weekday_map = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+        current_weekday = weekday_map[weekday_index]
+        
+        logger.info(f"파이프라인 실행 시작: date={chart_date}, weekday={current_weekday}, sort_keys={sort_keys}, collect_all_weekdays={collect_all_weekdays}")
         
         all_success = True
         
@@ -117,13 +122,25 @@ def main(request):
         logger.info("API 호출하여 기본 데이터 수집...")
         logger.info(f"⚠️  주의: 카카오 웹툰 API는 과거 날짜의 차트 데이터를 제공하지 않습니다. "
                    f"요청한 날짜({chart_date})와 무관하게 항상 현재 시점의 데이터를 수집합니다.")
-        api_data = try_api_endpoints(
-            weekday=None,  # 모든 요일 수집 모드
-            filter_type='전체',  # 전체 필터
-            collect_all_weekdays=collect_all_weekdays,
-            sort_key=None,  # 정렬은 클라이언트 사이드에서 처리
-            chart_date=chart_date  # 메타데이터용 (API 호출에는 영향 없음)
-        )
+        
+        # collect_all_weekdays가 True이면 모든 요일 수집, False이면 현재 요일만 수집
+        if collect_all_weekdays:
+            api_data = try_api_endpoints(
+                weekday=None,  # 모든 요일 수집 모드
+                filter_type='전체',  # 전체 필터
+                collect_all_weekdays=True,
+                sort_key=None,  # 정렬은 클라이언트 사이드에서 처리
+                chart_date=chart_date  # 메타데이터용 (API 호출에는 영향 없음)
+            )
+        else:
+            # 현재 요일만 수집 (매일 수집 모드)
+            api_data = try_api_endpoints(
+                weekday=current_weekday,  # 현재 요일만 수집
+                filter_type='전체',  # 전체 필터
+                collect_all_weekdays=False,
+                sort_key=None,  # 정렬은 클라이언트 사이드에서 처리
+                chart_date=chart_date  # 메타데이터용 (API 호출에는 영향 없음)
+            )
         
         if api_data is None:
             logger.error("데이터 수집 실패")
@@ -155,17 +172,8 @@ def main(request):
         else:
             logger.info("GCS 업로드 모듈이 없습니다. 로컬 테스트 모드로 진행합니다.")
         
-        # Step 2: Parse (데이터 파싱)
-        logger.info("데이터 파싱 시작...")
-        parsed_data = parse_api_response(api_data)
-        
-        if len(parsed_data) == 0:
-            logger.error("파싱된 데이터가 없습니다.")
-            return {'error': 'No data parsed'}, 500
-        
-        logger.info(f"파싱 완료: {len(parsed_data)}개 웹툰 데이터")
-        
-        # Step 3: Transform & Load Refined (각 정렬 옵션별로 처리)
+        # Step 2 & 3: Parse & Transform & Load Refined (각 정렬 옵션별로 처리)
+        # 주의: parse_api_response는 각 sort_key별로 호출되므로 여기서는 호출하지 않음
         # 임시 디렉토리 사용 (Cloud Functions의 /tmp 사용)
         import tempfile
         temp_dir = Path(tempfile.gettempdir()) / 'kakao_webtoon_pipeline'

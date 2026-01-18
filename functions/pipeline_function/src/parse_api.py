@@ -32,8 +32,19 @@ def sort_cards_by_sorting(cards: List[Dict[str, any]], sort_key: str) -> List[Di
             return sorting.get(sort_key, 0)
         return 0
     
-    # 내림차순 정렬 (높은 값이 먼저)
-    sorted_cards = sorted(cards, key=get_sort_value, reverse=True)
+    # 각 정렬 옵션별 정렬 방향 정의
+    # views는 역순 (작은 값이 먼저 = 순위가 높음)
+    # 다른 정렬 옵션들은 큰 값이 먼저 (확인 필요)
+    SORT_REVERSE = {
+        'views': False,  # 작은 값이 먼저 (역순 rank)
+        'popularity': True,  # 큰 값이 먼저 (확인 필요)
+        'createdAt': True,  # 큰 값이 먼저 (최신순일 가능성, 확인 필요)
+        'popularityMale': True,  # 큰 값이 먼저 (확인 필요)
+        'popularityFemale': True,  # 큰 값이 먼저 (확인 필요)
+    }
+    
+    reverse = SORT_REVERSE.get(sort_key, True)  # 기본값: 큰 값이 먼저
+    sorted_cards = sorted(cards, key=get_sort_value, reverse=reverse)
     return sorted_cards
 
 
@@ -97,9 +108,11 @@ def parse_api_response(api_data: dict, sort_key: Optional[str] = None) -> List[D
         
         logger.info(f"API 응답에서 {len(data_list)}개의 데이터 그룹 발견")
         
-        rank = 1
+        # 요일별로 그룹화하여 각 요일 내에서 순위 계산 (weekday_rank)
+        # 네이버 웹툰과 동일한 방식으로 구현
+        weekday_groups = {}
         
-        # data 배열 순회 (요일별 데이터 그룹)
+        # 먼저 모든 데이터를 요일별로 그룹화
         for data_item in data_list:
             if not isinstance(data_item, dict):
                 continue
@@ -107,9 +120,16 @@ def parse_api_response(api_data: dict, sort_key: Optional[str] = None) -> List[D
             # 요일 정보 추출: data_item에 _weekday가 있으면 사용, 없으면 최상위 레벨의 _weekday 사용
             weekday = data_item.get('_weekday') or default_weekday
             
+            if not weekday:
+                logger.warning("요일 정보를 찾을 수 없습니다.")
+                continue
+            
+            if weekday not in weekday_groups:
+                weekday_groups[weekday] = []
+            
             card_groups = data_item.get('cardGroups', [])
             if not card_groups:
-                logger.warning("cardGroups를 찾을 수 없습니다.")
+                logger.warning(f"요일 {weekday}: cardGroups를 찾을 수 없습니다.")
                 continue
             
             # cardGroups 배열 순회
@@ -124,21 +144,35 @@ def parse_api_response(api_data: dict, sort_key: Optional[str] = None) -> List[D
                 # 정렬 키가 지정된 경우 sorting 정보를 사용하여 정렬
                 if sort_key:
                     cards = sort_cards_by_sorting(cards, sort_key)
-                    logger.info(f"카드를 {sort_key} 기준으로 정렬: {len(cards)}개")
+                    logger.info(f"요일 {weekday}: 카드를 {sort_key} 기준으로 정렬: {len(cards)}개")
                 
-                # cards 배열 순회 (실제 웹툰 데이터)
+                # 각 카드에 요일 정보 추가
                 for card in cards:
-                    if not isinstance(card, dict):
-                        continue
-                    
-                    try:
-                        webtoon_data = extract_webtoon_from_api_item(card, rank=rank, weekday=weekday)
-                        if webtoon_data:
-                            chart_data.append(webtoon_data)
-                            rank += 1
-                    except Exception as e:
-                        logger.warning(f"항목 {rank} 파싱 실패: {e}")
-                        continue
+                    if isinstance(card, dict):
+                        card['_weekday'] = weekday
+                        weekday_groups[weekday].append(card)
+        
+        # 각 요일별로 순위를 매기고 데이터 추출
+        global_rank = 1
+        for weekday, cards in weekday_groups.items():
+            for idx, card in enumerate(cards, start=1):
+                if not isinstance(card, dict):
+                    continue
+                
+                try:
+                    # 요일별 순위와 전체 순위 모두 저장
+                    webtoon_data = extract_webtoon_from_api_item(
+                        card, 
+                        rank=global_rank,  # 전체 순위 (통합 순위)
+                        weekday=weekday,   # 요일 정보
+                        weekday_rank=idx   # 요일별 순위 (각 요일 내에서 1, 2, 3, ...)
+                    )
+                    if webtoon_data:
+                        chart_data.append(webtoon_data)
+                        global_rank += 1
+                except Exception as e:
+                    logger.warning(f"항목 파싱 실패 (요일: {weekday}, 순위: {global_rank}): {e}")
+                    continue
         
         logger.info(f"API 파싱 완료: {len(chart_data)}개 웹툰 데이터 추출")
         return chart_data
@@ -150,7 +184,7 @@ def parse_api_response(api_data: dict, sort_key: Optional[str] = None) -> List[D
         return []
 
 
-def extract_webtoon_from_api_item(card: dict, rank: int, weekday: Optional[str] = None) -> Optional[Dict[str, any]]:
+def extract_webtoon_from_api_item(card: dict, rank: int, weekday: Optional[str] = None, weekday_rank: Optional[int] = None) -> Optional[Dict[str, any]]:
     """
     API 응답의 개별 카드(card) 항목에서 웹툰 데이터를 추출합니다.
     
@@ -166,8 +200,9 @@ def extract_webtoon_from_api_item(card: dict, rank: int, weekday: Optional[str] 
     
     Args:
         card: API 응답의 개별 카드 항목 (딕셔너리)
-        rank: 순위
+        rank: 전체 순위 (통합 순위)
         weekday: 요일 정보 ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')
+        weekday_rank: 요일별 순위 (각 요일 내에서 1, 2, 3, ...)
     
     Returns:
         웹툰 데이터 딕셔너리 (실패 시 None)
@@ -295,6 +330,10 @@ def extract_webtoon_from_api_item(card: dict, rank: int, weekday: Optional[str] 
         
         if weekday:
             data['weekday'] = weekday
+        
+        # 요일별 순위 추가
+        if weekday_rank is not None:
+            data['weekday_rank'] = weekday_rank
         
         return data
         
